@@ -1,15 +1,19 @@
 {
+  "timeZone": "Europe/Rome",
+  "dependencies": {
+  },
+  "oauthScopes": ["https://www.googleapis.com/auth/script.external_request"],
   "dataStudio": {
-    "name": "AWS Athena Connector",
-    "company": "Google Data Studio Developer Relations",
-    "companyUrl": "https://developers.google.com/datastudio/",
-    "logoUrl": "https://github.com/canyousayyes/datastudio-aws-athena-connector/raw/master/assets/logo.png",
-    "addonUrl": "https://github.com/canyousayyes/datastudio-aws-athena-connector#readme",
+    "name": "CMCC AWS Athena Connector",
+    "logoUrl": "https://github.com/rastandy/datastudio-aws-athena-connector/raw/master/assets/logo.png",
+    "company": "CMCC",
+    "companyUrl": "https://www.cmcc.it",
+    "addonUrl": "https://github.com/rastandy/datastudio-aws-athena-connector#readme",
     "supportUrl": "https://github.com/googledatastudio/community-connectors/issues",
     "description": "This connector calls API to AWS Athena and AWS Glue to query data from AWS S3. Users can therefore create reports using S3 as the data source.",
+    "sources": ["AMAZON_S3"],
     "shortDescription": "Query AWS S3 data using AWS Athena",
     "authType": ["NONE"],
-    "feeType": ["FREE"],
-    "sources": ["AMAZON_S3"]
+    "feeType": ["FREE"]
   }
 }
