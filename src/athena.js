@@ -1,4 +1,3 @@
-
 /**
  * Generate Athena query string from the getData() request.
  *
@@ -22,12 +21,23 @@ function generateAthenaQuery(request, fields) {
   var table = params.tableName;
 
   var query = 'SELECT ' + columns.join(', ') + ' FROM "' + table + '"';
+  
   if (params.dateRangeColumn) {
     var startDate = request.dateRange.startDate;
     var endDate = request.dateRange.endDate;
 
-    // startDate and endDate are always STRING
-    // But in Athena query we need a correct data type
+    // Generate partition conditions
+    var partitionRanges = generatePartitionRanges(startDate, endDate);
+    var partitionConditions = partitionRanges.map(function(range) {
+      return '(year = \'' + range.year + '\' AND month = \'' + 
+             range.month + '\' AND day BETWEEN \'' + 
+             range.startDay + '\' AND \'' + range.endDay + '\')';
+    });
+
+    // Add partition filtering
+    query += ' WHERE (' + partitionConditions.join(' OR ') + ')';
+
+    // Add date range condition
     var dateRangeField = fields.getFieldById(params.dateRangeColumn);
     var cc = DataStudioApp.createCommunityConnector();
     var types = cc.FieldType;
@@ -44,18 +54,61 @@ function generateAthenaQuery(request, fields) {
         break;
     }
 
-    // WHERE "${params.dateRangeColumn}"
-    // BETWEEN ${dateRangeDataType} '${startDate}'
-    // AND ${dateRangeDataType} '${endDate}'
-    query += ' WHERE "' + params.dateRangeColumn + '"' +
+    query += ' AND "' + params.dateRangeColumn + '"' +
       ' BETWEEN ' + dateRangeDataType + ' \'' + startDate + '\'' +
-      ' AND ' + dateRangeDataType + ' \'' + endDate + '\'' ;
+      ' AND ' + dateRangeDataType + ' \'' + endDate + '\'';
   }
+
   if (rowLimit !== -1) {
     query += ' LIMIT ' + rowLimit;
   }
 
   return query;
+}
+
+/**
+ * Generates partition ranges for optimized querying
+ * @param {Date} startDate 
+ * @param {Date} endDate 
+ * @returns {Object} Partition ranges
+ */
+function generatePartitionRanges(startDate, endDate) {
+  var start = new Date(startDate);
+  var end = new Date(endDate);
+  
+  // Get all years in range
+  var years = [];
+  for (var y = start.getFullYear(); y <= end.getFullYear(); y++) {
+    years.push(y);
+  }
+
+  // Get months range for each year
+  var ranges = [];
+  years.forEach(function(year) {
+    var startMonth = (year === start.getFullYear()) ? start.getMonth() + 1 : 1;
+    var endMonth = (year === end.getFullYear()) ? end.getMonth() + 1 : 12;
+    
+    for (var month = startMonth; month <= endMonth; month++) {
+      var startDay = (year === start.getFullYear() && month === start.getMonth() + 1) ? start.getDate() : 1;
+      var endDay;
+      
+      if (year === end.getFullYear() && month === end.getMonth() + 1) {
+        endDay = end.getDate();
+      } else {
+        // Last day of month
+        endDay = new Date(year, month, 0).getDate();
+      }
+
+      ranges.push({
+        year: year.toString(),
+        month: String(month).padStart(2, '0'),
+        startDay: String(startDay).padStart(2, '0'),
+        endDay: String(endDay).padStart(2, '0')
+      });
+    }
+  });
+
+  return ranges;
 }
 
 /**
