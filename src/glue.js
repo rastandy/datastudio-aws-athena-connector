@@ -74,10 +74,26 @@ function getFieldsFromGlue(request) {
   var params = request.configParams;
   AWS.init(params.awsAccessKeyId, params.awsSecretAccessKey);
 
-  var payload = {
-    'DatabaseName': params.databaseName,
-    'Name': params.tableName
-  };
-  var result = AWS.post('glue', params.awsRegion, 'AWSGlue.GetTable', payload);
-  return glueTableToFields(result.Table);
+  // Cache the Glue table schema (it changes rarely) so we don't make an extra
+  // AWS GetTable round-trip on every getData() call, i.e. on every chart load.
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'glue:' + params.awsRegion + ':' + params.databaseName + ':' + params.tableName;
+  var table;
+  var cached = cache.get(cacheKey);
+  if (cached) {
+    table = JSON.parse(cached);
+  } else {
+    var payload = {
+      'DatabaseName': params.databaseName,
+      'Name': params.tableName
+    };
+    var result = AWS.post('glue', params.awsRegion, 'AWSGlue.GetTable', payload);
+    table = result.Table;
+    try {
+      // Cache for 10 minutes. Wrapped in try/catch since CacheService rejects
+      // values over 100KB (a table schema is far smaller, but be safe).
+      cache.put(cacheKey, JSON.stringify(table), 600);
+    } catch (e) { /* schema too large to cache; skip caching */ }
+  }
+  return glueTableToFields(table);
 }

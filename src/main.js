@@ -71,6 +71,13 @@ function getConfig(request) {
     .setPlaceholder('1000')
     .setAllowOverride(true);
 
+  config.newTextInput()
+    .setId('resultReuseMaxAge')
+    .setName('Athena Result Reuse (minutes)')
+    .setHelpText('(Optional) Reuse cached Athena query results up to this age (minutes) to speed up repeated dashboard loads. Default 60. Set to 0 to disable.')
+    .setPlaceholder('60')
+    .setAllowOverride(true);
+
   config.setDateRangeRequired(true);
 
   return config.build();

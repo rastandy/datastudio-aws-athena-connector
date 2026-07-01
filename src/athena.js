@@ -67,7 +67,7 @@ function generateAthenaQuery(request, fields) {
  * @param  {string} outputLocation The S3 path (s3://<bucket>/<path>) to store the query result.
  * @return {Object} {"QueryExecutionId": "string"}
  */
-function runAthenaQuery(region, database, query, outputLocation) {
+function runAthenaQuery(region, database, query, outputLocation, resultReuseMaxAgeMinutes) {
   var payload = {
     'ClientRequestToken': uuidv4(),
     'QueryExecutionContext': {
@@ -78,6 +78,18 @@ function runAthenaQuery(region, database, query, outputLocation) {
       'OutputLocation': outputLocation
     }
   };
+  // Athena query result reuse (requires engine v3, the default). Identical
+  // queries return previously computed results without re-scanning S3, which
+  // makes dashboard reloads of the same charts near-instant instead of
+  // re-running the full query every time.
+  if (resultReuseMaxAgeMinutes && resultReuseMaxAgeMinutes > 0) {
+    payload.ResultReuseConfiguration = {
+      'ResultReuseByAgeConfiguration': {
+        'Enabled': true,
+        'MaxAgeInMinutes': resultReuseMaxAgeMinutes
+      }
+    };
+  }
   return AWS.post('athena', region, 'AmazonAthena.StartQueryExecution', payload);
 }
 
@@ -95,7 +107,12 @@ function waitAthenaQuery(region, queryExecutionId) {
     'QueryExecutionId': queryExecutionId
   };
 
-  // Ping for status until the query reached a terminal state
+  // Ping for status until the query reached a terminal state.
+  // The first poll happens immediately (with result reuse a query is often
+  // already SUCCEEDED, so we return with no wait at all). Otherwise back off
+  // gently starting at 250ms up to a 2s cap, instead of a flat 3s sleep that
+  // added seconds of dead time to every fast query.
+  var delay = 250;
   while (1) {
     var result = AWS.post('athena', region, 'AmazonAthena.GetQueryExecution', payload);
     var state = result.QueryExecution.Status.State.toLowerCase();
@@ -108,7 +125,8 @@ function waitAthenaQuery(region, queryExecutionId) {
         throw new Error('Query cancelled');
     }
 
-    Utilities.sleep(3000);
+    Utilities.sleep(delay);
+    delay = Math.min(delay * 2, 2000);
   }
 }
 
@@ -216,9 +234,14 @@ function getDataFromAthena(request) {
   var params = request.configParams;
   AWS.init(params.awsAccessKeyId, params.awsSecretAccessKey);
 
-  // Generate and submit query
+  // Generate and submit query. Reuse cached Athena results up to the
+  // configured age (default 60 min) so repeated dashboard loads are fast.
+  var resultReuseMaxAge = parseInt(params.resultReuseMaxAge);
+  if (isNaN(resultReuseMaxAge)) {
+    resultReuseMaxAge = 60;
+  }
   var query = generateAthenaQuery(request, fields);
-  var runResult = runAthenaQuery(params.awsRegion, params.databaseName, query, params.outputLocation);
+  var runResult = runAthenaQuery(params.awsRegion, params.databaseName, query, params.outputLocation, resultReuseMaxAge);
   var queryExecutionId = runResult.QueryExecutionId;
   waitAthenaQuery(params.awsRegion, queryExecutionId);
 

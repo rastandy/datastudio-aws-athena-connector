@@ -3,6 +3,10 @@ var AWS = (function() {
   // Keys cannot be retrieved once initialized but can be changed
   var accessKey;
   var secretKey;
+  // Memoized CryptoJS instance. Loading/defining the library is CPU-heavy and
+  // was previously done on every single AWS request (many per getData); cache
+  // it for the lifetime of the execution.
+  var _crypto;
 
   return {
     /**
@@ -46,7 +50,7 @@ var AWS = (function() {
         payload = JSON.stringify(payload);
       }
 
-      var Crypto = loadCrypto();
+      var Crypto = _crypto || (_crypto = loadCrypto());
 
       var d = new Date();
 
