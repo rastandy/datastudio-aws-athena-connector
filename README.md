@@ -9,6 +9,25 @@ Connector](https://developers.google.com/datastudio/connector) lets users query 
 
 The connector is using [AWS Athena](https://aws.amazon.com/athena/) for underlying queries.
 
+## Performance optimizations (this fork)
+
+This fork adds latency optimizations for Looker Studio dashboards backed by
+partitioned Athena tables:
+
+- **Athena result reuse** — identical repeat queries return cached results
+  without re-scanning S3 (requires Athena engine v3). Configurable via the new
+  **Athena Result Reuse (minutes)** connector setting (default `60`; `0`
+  disables).
+- **Partition pruning** — the generated `WHERE` clause restricts scans to the
+  Hive partitions (`year`/`month`/`day`) covered by the report's date range,
+  instead of scanning the whole table.
+- **Faster status polling** — exponential backoff (250 ms → 2 s cap) while
+  waiting for a query, instead of a flat 3 s sleep, so fast or reused queries
+  return almost immediately.
+- **Glue schema cache** — the table schema is cached (10 min) to avoid a Glue
+  `GetTable` call on every `getData` request.
+- **Memoized crypto** — the CryptoJS dependency is loaded once per execution.
+
 ## Try the Community Connector in Data Studio
 
 ### Notes
